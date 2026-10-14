@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Document Intelligence{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Process a document</h2>
+  <form id="upload-form" class="upload-grid">
+    <label>Document type
+      <select name="document_type" id="doc-type" required>
+        <option value="invoice">Invoice</option>
+        <option value="balance_sheet">Balance Sheet</option>
+        <option value="profit_and_loss">Profit &amp; Loss</option>
+        <option value="cash_flow_statement">Cash Flow Statement</option>
+      </select>
+    </label>
+    <label>File (PDF / JPG / PNG, max 3 pages)
+      <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+    </label>
+    <button type="submit" id="process-btn" class="btn primary">Process</button>
+  </form>
+  <div id="upload-msg" class="msg" hidden></div>
+</section>
+
+<section class="card">
+  <div class="row-between">
+    <h2>Processed documents <span id="total" class="muted"></span></h2>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search by name…" aria-label="Search by name">
+      <select id="f-type" aria-label="Filter by type">
+        <option value="">All types</option>
+        <option value="invoice">Invoice</option>
+        <option value="balance_sheet">Balance Sheet</option>
+        <option value="profit_and_loss">Profit &amp; Loss</option>
+        <option value="cash_flow_statement">Cash Flow</option>
+      </select>
+      <select id="f-status" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="PASS">PASS</option>
+        <option value="FAILED">FAILED</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="docs-table">
+      <thead><tr>
+        <th>Document</th><th>Type</th><th>Status</th><th>Validation</th><th>Confidence</th><th>Processed</th>
+      </tr></thead>
+      <tbody id="docs-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}

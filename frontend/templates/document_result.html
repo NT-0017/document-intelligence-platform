@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Result · Document Intelligence{% endblock %}
+{% block content %}
+<p><a href="/">&larr; Back to dashboard</a></p>
+<div id="state" class="muted">Loading…</div>
+<div id="result" hidden>
+  <section class="card" id="summary"></section>
+  <div id="banners"></div>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="data" role="tab">Extracted data</button>
+    <button class="tab" data-tab="validation" role="tab">Financial validation</button>
+    <button class="tab" data-tab="json" role="tab">Raw JSON</button>
+  </div>
+  <section id="tab-data" class="card"></section>
+  <section id="tab-validation" class="card" hidden></section>
+  <section id="tab-json" class="card" hidden></section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/result.js"></script>{% endblock %}
