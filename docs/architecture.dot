@@ -1,0 +1,26 @@
+digraph G {
+  rankdir=LR; ordering=out; bgcolor="white"; nodesep=0.35; ranksep=0.55; pad=0.3;
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=12, color="#9fb0c8", fillcolor="#eef3fb", margin="0.18,0.1"];
+  edge [color="#55657d", fontname="Helvetica", fontsize=10];
+
+  user [label="User / Evaluator\n(browser)", fillcolor="#fff4d6", color="#d9b24a"];
+  fe   [label="Frontend\nHTML + CSS + JS\n(dashboard, result viewer,\nraw JSON)"];
+  subgraph cluster_api {
+    label="FastAPI service (Docker on Render)"; fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#55657d";
+    routes [label="REST API  /api/v1\nPOST /documents/process\nGET /documents/{name}\nGET /documents · GET /health\nSwagger: /docs"];
+    svc    [label="document_service\n(orchestrator + status)", fillcolor="#dde8fb"];
+    val    [label="1 · document_validation\ntype (magic bytes) · size ·\ncorruption · ≤3 pages"];
+    ocr    [label="2 · ocr_service\nPDF text layer / Tesseract"];
+    ext    [label="3 · extraction_service\nprompt + JSON schema →\nPydantic → normalized JSON"];
+    fin    [label="4 · financial_validation\nPASS / FAIL / NOT_APPLICABLE\n(deterministic, no LLM)"];
+    conf   [label="5 · confidence\nLLM value vs OCR text"];
+    repo   [label="repositories\nDocumentRepository"];
+  }
+  llm [label="Gemini API\n(vision LLM)", fillcolor="#e6f6ec", color="#6fbf8f"];
+  db  [label="Database\nSQLite (local) /\nPostgres (Neon)", shape=cylinder, fillcolor="#f3e8fb", color="#b58fd6"];
+
+  user -> fe; fe -> routes [label="multipart / JSON"];
+  routes -> svc; svc -> val; svc -> ocr; svc -> ext; svc -> fin; svc -> conf; svc -> repo;
+  ext -> llm [label="file + prompt"]; llm -> ext [style=dashed, label="JSON"];
+  repo -> db;
+}

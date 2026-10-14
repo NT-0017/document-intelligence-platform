@@ -1,0 +1,16 @@
+# Render Blueprint: one Docker web service serves the API, Swagger (/docs) and the frontend.
+services:
+  - type: web
+    name: document-intelligence
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # set in the Render dashboard, never in git
+      - key: DATABASE_URL
+        sync: false          # e.g. a free Neon/Supabase Postgres URL (SQLite is wiped on free-tier restarts)
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: LOG_LEVEL
+        value: INFO

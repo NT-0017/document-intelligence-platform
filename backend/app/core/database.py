@@ -12,14 +12,23 @@ class Base(DeclarativeBase):
     pass
 
 
+def _normalize_url(url: str) -> str:
+    """Hosted providers hand out postgres:// or postgresql:// URLs; use the psycopg v3 driver."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def _make_engine(url: str):
+    url = _normalize_url(url)
     args = {}
     if url.startswith("sqlite"):
         args["check_same_thread"] = False
         path = url.replace("sqlite:///", "", 1)
         if path and path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    return create_engine(url, connect_args=args)
+    return create_engine(url, connect_args=args, pool_pre_ping=True)
 
 
 engine = _make_engine(get_settings().database_url)
