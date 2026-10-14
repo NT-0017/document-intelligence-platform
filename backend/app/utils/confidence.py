@@ -4,7 +4,7 @@ For each extracted value we check whether it can be found in the independent OCR
 output of the same document:
     confidence = 0.60 + 0.35 * (share of the value's parts corroborated by OCR)
   * corroborated        -> 0.95
-  * not found in OCR    -> 0.60 (read by the LLM only; highlighted as low confidence < 0.70)
+  * not found in OCR    -> 0.60 (read by the LLM only; flagged as low confidence, i.e. < 0.80)
   * null value / no OCR -> no score (None)
 This is not an LLM self-rating. Its limit: OCR itself can miss text (stamps, handwriting).
 """
@@ -12,7 +12,7 @@ import re
 from statistics import mean
 
 BASE, SPAN = 0.60, 0.35
-LOW_CONFIDENCE_THRESHOLD = 0.70
+LOW_CONFIDENCE_THRESHOLD = 0.80
 
 _NUM = re.compile(r"\(?-?\d[\d,]*(?:\.\d+)?\)?")
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
@@ -59,12 +59,25 @@ def score(frac: float) -> float:
     return round(BASE + SPAN * frac, 2)
 
 
-def _scalar(field: dict, text: str, nums: set[float]) -> None:
+# Currency codes are often printed as symbols/words, so accept those as corroboration.
+CURRENCY_ALIASES = {
+    "INR": ["inr", "rs.", "rs ", "\u20b9", "crore", "lakh"], "MYR": ["rm", "myr"], "USD": ["usd", "$"],
+    "EUR": ["eur", "\u20ac"], "GBP": ["gbp", "\u00a3"], "SGD": ["sgd", "s$"], "AED": ["aed", "dirham"],
+}
+
+
+def _scalar(field: dict, text: str, nums: set[float], key: str = "") -> None:
     v = field.get("value")
     if v is None or isinstance(v, bool):
         field["confidence"] = None
         return
-    ok = round(abs(float(v)), 2) in nums if isinstance(v, (int, float)) else text_grounded(str(v), text, nums)
+    if isinstance(v, (int, float)):
+        ok = round(abs(float(v)), 2) in nums
+    else:
+        ok = text_grounded(str(v), text, nums)
+        if not ok and key == "currency":
+            low = text.lower()
+            ok = any(a in low for a in CURRENCY_ALIASES.get(str(v).upper().strip(), []))
     field["confidence"] = score(1.0 if ok else 0.0)
 
 
@@ -76,7 +89,7 @@ def apply_confidence(data: dict, ocr_text: str) -> float | None:
 
     for key, f in data.items():
         if isinstance(f, dict) and "value" in f:
-            _scalar(f, ocr_text, nums)
+            _scalar(f, ocr_text, nums, key)
             if f["confidence"] is not None:
                 scores.append(f["confidence"])
 
