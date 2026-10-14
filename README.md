@@ -32,7 +32,7 @@ Browser (HTML/CSS/JS) ──► FastAPI ─► routes/documents.py
 Flow: `upload → file validation → OCR/text layer → LLM extraction → structured JSON → financial validation →
 evidence + confidence → store → PASS/FAILED → dashboard + API`.
 
-Diagram: [`docs/architecture.png`](docs/architecture.png). Code layout follows the required structure
+Diagram: [`docs/architecture.png`](docs/architecture.png) (source: `docs/architecture.dot`). Presentation: `docs/solution_presentation.pptx` / `.pdf`. Code layout follows the required structure
 (`backend/app/{api,core,models,schemas,services,repositories,utils}`, `frontend/`, `docs/`, `sample_outputs/`, `tests/`).
 
 ## 2. Technology stack and why

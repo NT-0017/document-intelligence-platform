@@ -1,26 +1,28 @@
 digraph G {
-  rankdir=LR; ordering=out; bgcolor="white"; nodesep=0.35; ranksep=0.55; pad=0.3;
-  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=12, color="#9fb0c8", fillcolor="#eef3fb", margin="0.18,0.1"];
-  edge [color="#55657d", fontname="Helvetica", fontsize=10];
+  rankdir=TB; bgcolor="white"; nodesep=0.3; ranksep=0.5; pad=0.25; newrank=true;
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=15, color="#9fb0c8", fillcolor="#eef3fb", margin="0.2,0.12"];
+  edge [color="#55657d", fontname="Helvetica", fontsize=12];
 
-  user [label="User / Evaluator\n(browser)", fillcolor="#fff4d6", color="#d9b24a"];
-  fe   [label="Frontend\nHTML + CSS + JS\n(dashboard, result viewer,\nraw JSON)"];
+  user [label="User / Evaluator (browser)", fillcolor="#fff4d6", color="#d9b24a"];
+  fe   [label="Frontend: HTML + CSS + JS  (dashboard · result viewer · raw JSON)"];
   subgraph cluster_api {
-    label="FastAPI service (Docker on Render)"; fontname="Helvetica-Bold"; fontsize=13; style="rounded"; color="#55657d";
-    routes [label="REST API  /api/v1\nPOST /documents/process\nGET /documents/{name}\nGET /documents · GET /health\nSwagger: /docs"];
-    svc    [label="document_service\n(orchestrator + status)", fillcolor="#dde8fb"];
-    val    [label="1 · document_validation\ntype (magic bytes) · size ·\ncorruption · ≤3 pages"];
-    ocr    [label="2 · ocr_service\nPDF text layer / Tesseract"];
-    ext    [label="3 · extraction_service\nprompt + JSON schema →\nPydantic → normalized JSON"];
-    fin    [label="4 · financial_validation\nPASS / FAIL / NOT_APPLICABLE\n(deterministic, no LLM)"];
-    conf   [label="5 · confidence\nLLM value vs OCR text"];
-    repo   [label="repositories\nDocumentRepository"];
+    label="FastAPI service (Docker on Render)"; fontname="Helvetica-Bold"; fontsize=16; style="rounded"; color="#55657d";
+    routes [label="REST API  /api/v1  ·  POST /documents/process  ·  GET /documents/{name}  ·  GET /documents  ·  GET /health   (Swagger: /docs)"];
+    svc    [label="document_service  (orchestrator + PASS / FAILED status)", fillcolor="#dde8fb"];
+    val  [label="1 · file validation\ntype · size ·\ncorruption · ≤3 pages"];
+    ocr  [label="2 · OCR service\nPDF text layer /\nTesseract"];
+    ext  [label="3 · extraction\nprompt + schema →\nPydantic → JSON"];
+    fin  [label="4 · financial checks\nPASS / FAIL / N/A\n(no LLM)"];
+    conf [label="5 · confidence\nLLM value vs\nOCR text"];
+    repo [label="6 · repository\nSQLAlchemy"];
+    {rank=same; val; ocr; ext; fin; conf; repo}
   }
   llm [label="Gemini API\n(vision LLM)", fillcolor="#e6f6ec", color="#6fbf8f"];
-  db  [label="Database\nSQLite (local) /\nPostgres (Neon)", shape=cylinder, fillcolor="#f3e8fb", color="#b58fd6"];
+  db  [label="Database\nSQLite (local) / Postgres (Neon)", shape=cylinder, fillcolor="#f3e8fb", color="#b58fd6"];
 
-  user -> fe; fe -> routes [label="multipart / JSON"];
-  routes -> svc; svc -> val; svc -> ocr; svc -> ext; svc -> fin; svc -> conf; svc -> repo;
-  ext -> llm [label="file + prompt"]; llm -> ext [style=dashed, label="JSON"];
+  user -> fe -> routes -> svc;
+  svc -> val; svc -> ocr; svc -> ext; svc -> fin; svc -> conf; svc -> repo;
+  val -> ocr -> ext -> fin -> conf -> repo [style=invis];
+  ext -> llm [label=" file + prompt"]; llm -> ext [style=dashed, label="JSON "];
   repo -> db;
 }
