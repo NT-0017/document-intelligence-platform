@@ -196,3 +196,17 @@ def test_invoice_line_discount_percent_is_honoured():
     checks = {c["name"]: c for c in run_validation(DocumentType.INVOICE, data)["checks"]}
     assert checks["line_item_1_check"]["status"] == "PASS" and checks["line_item_2_check"]["status"] == "PASS"
     assert checks["line_item_3_check"]["status"] == "FAIL"
+
+
+def test_wrong_tax_included_flag_does_not_fail_a_consistent_gst_invoice():
+    # real invoice SCI/25-26/3331: lines are pre-tax; "(Incl. of Tax)" is only a column heading
+    def F(v): return {"value": v}
+    lines = [2499.84, 0.45, 2064.60, 892.80, 0.60, 356.88]
+    data = {"subtotal": F(5815.17), "tax_amount": F(1046.72), "rounding_adjustment": F(0.11),
+            "total_amount": F(6862.0), "tax_included_in_total": F(True),
+            "line_items": [{"amount": a} for a in lines]}
+    chk = {c["name"]: c for c in run_validation(DocumentType.INVOICE, data)["checks"]}
+    assert chk["line_items_sum_check"]["status"] == "PASS" and chk["invoice_total_check"]["status"] == "PASS"
+    data["line_items"][0]["amount"] = 2000.0  # genuinely wrong lines still fail
+    chk = {c["name"]: c for c in run_validation(DocumentType.INVOICE, data)["checks"]}
+    assert chk["line_items_sum_check"]["status"] == "FAIL"

@@ -75,10 +75,19 @@ def validate_invoice(data: dict, tol: float) -> list[dict]:
         total_amt = sum(amounts)
         if incl and total is not None:
             # line prices already include tax -> compare with the payable total
-            checks.append(_check("line_items_sum_check",
-                                 "sum(line_item.amount) - discount + rounding_adjustment (prices include tax)",
-                                 {"line_amounts": amounts, "discount": d, "rounding_adjustment": r},
-                                 total_amt - d + r, total, tol))
+            res = _check("line_items_sum_check",
+                         "sum(line_item.amount) - discount + rounding_adjustment (prices include tax)",
+                         {"line_amounts": amounts, "discount": d, "rounding_adjustment": r},
+                         total_amt - d + r, total, tol)
+            if res["status"] == FAIL and subtotal is not None:
+                # The flag can be wrong (e.g. a column titled "Rate (Incl. of Tax)"): if the lines reconcile
+                # with the pre-tax subtotal, the amounts are pre-tax and the document is consistent.
+                alt = _check("line_items_sum_check", "sum(line_item.amount)", {"line_amounts": amounts},
+                             total_amt, subtotal, tol,
+                             note="Line amounts are pre-tax: they match the printed subtotal.")
+                if alt["status"] == PASS:
+                    res = alt
+            checks.append(res)
         elif subtotal is not None:
             checks.append(_check("line_items_sum_check", "sum(line_item.amount)",
                                  {"line_amounts": amounts}, total_amt, subtotal, tol))

@@ -21,7 +21,8 @@ INVOICE_HINTS = """Document type: INVOICE / RECEIPT.
   only if day/month order is unclear keep it as printed. The printed text goes in source_text.
 - subtotal = the amount BEFORE tax if the document prints one (e.g. 'Total (Excluding GST)'), otherwise null.
 - tax_amount = tax actually printed (GST/VAT/SST). tax_included_in_total = true only if the document says the
-  prices/total include tax. discount = null if none is printed.
+  FINAL TOTAL includes tax (e.g. "Total Sales (Inclusive GST)"). A column heading such as "Rate (Incl. of Tax)"
+  does NOT make the total tax-inclusive; if tax is printed separately and subtotal + tax = total, use false. discount = null if none is printed.
 - customer_address = ONLY an address printed under a Bill To / Ship To / Sold To / Customer / Client label (or a
   job-site address labelled as such). An address under 'From' or in the header is the vendor's, never the customer's.
   vendor_address = street/city/postcode only; put e-mail addresses and phone numbers in other_fields.
