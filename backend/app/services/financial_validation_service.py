@@ -55,11 +55,14 @@ def validate_invoice(data: dict, tol: float) -> list[dict]:
 
     for i, li in enumerate(items, start=1):
         q, p, a = _num(li.get("quantity")), _num(li.get("unit_price")), _num(li.get("amount"))
+        disc = _num(li.get("discount_percent"))
         calc = q * p if q is not None and p is not None else None
-        checks.append(
-            _check(f"line_item_{i}_check", "quantity * unit_price", {"quantity": q, "unit_price": p},
-                   calc, a, tol)
-        )
+        ops, formula = {"quantity": q, "unit_price": p}, "quantity * unit_price"
+        if calc is not None and disc:
+            calc *= 1 - disc / 100
+            ops["discount_percent"] = disc
+            formula = "quantity * unit_price * (1 - discount_percent / 100)"
+        checks.append(_check(f"line_item_{i}_check", formula, ops, calc, a, tol))
 
     subtotal, tax, disc = _fv(data, "subtotal"), _fv(data, "tax_amount"), _fv(data, "discount")
     total, rounding = _fv(data, "total_amount"), _fv(data, "rounding_adjustment")

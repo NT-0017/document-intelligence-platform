@@ -105,10 +105,11 @@ class InvoiceLineItem(BaseModel):
     quantity: float | None = None
     unit_price: float | None = None
     amount: float | None = Field(None, description="Line total as printed")
+    discount_percent: float | None = Field(None, description="Per-line 'Disc %' column, e.g. 99 for '99 %'")
     tax_code: str | None = None
     page_number: int | None = None
 
-    @field_validator("quantity", "unit_price", "amount", mode="before")
+    @field_validator("quantity", "unit_price", "amount", "discount_percent", mode="before")
     @classmethod
     def _nums(cls, v):
         return to_number(v)

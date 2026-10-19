@@ -30,6 +30,7 @@ INVOICE_HINTS = """Document type: INVOICE / RECEIPT.
   way; use the label printed next to it as the key (e.g. 'job_site', 'account_code').
 - total_amount = the final payable total. cash_paid / change_given only if printed.
 - line_items: every purchased row with description, quantity, unit_price, amount (line total as printed).
+  If the row has a discount column (Disc %), give it as discount_percent (99 for '99 %'); tax_code = HSN/SAC or tax code column.
 - Put every other meaningful visible field (cashier, table, GST registration number, GST summary, etc.) in other_fields."""
 
 STATEMENT_COMMON = """Extract this financial statement completely.

@@ -111,3 +111,15 @@ def test_attributable_profit_recovered_and_numeric_labels_renamed():
     ex.line_items[2].label = "Profit for the year after minorities"
     ex.line_items[2].canonical_key = None
     assert "net_profit_attributable_to_group" in normalize_statement(ex)["key_figures"]
+
+
+def test_invoice_line_discount_parsed_and_empty_other_fields_dropped():
+    from app.schemas.extraction import InvoiceExtraction
+    from app.utils.normalize import normalize_invoice
+
+    ex = InvoiceExtraction.model_validate({
+        "line_items": [{"description": "x", "quantity": "6", "unit_price": "7.44", "amount": "0.45", "discount_percent": "99 %"}],
+        "other_fields": [{"key": "delivery_note", "value": None}, {"key": "sales_man", "value": "SUJIT"}]})
+    out = normalize_invoice(ex)
+    assert out["line_items"][0]["discount_percent"] == 99.0
+    assert [kv["key"] for kv in out["other_fields"]] == ["sales_man"]

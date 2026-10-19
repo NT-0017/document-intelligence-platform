@@ -22,7 +22,7 @@ def _field(f) -> dict:
 def normalize_invoice(ex: InvoiceExtraction) -> dict:
     out = {name: _field(getattr(ex, name)) for name in _SCALARS}
     out["line_items"] = [li.model_dump() for li in ex.line_items]
-    out["other_fields"] = [kv.model_dump() for kv in ex.other_fields]
+    out["other_fields"] = [kv.model_dump() for kv in ex.other_fields if (kv.value or "").strip()]
     return out
 
 
@@ -57,7 +57,7 @@ def normalize_statement(ex: StatementExtraction) -> dict:
     _fill_attributable_profit(items, key_figures, out["periods"])
     out["line_items"] = items
     out["key_figures"] = key_figures
-    out["other_fields"] = [kv.model_dump() for kv in ex.other_fields]
+    out["other_fields"] = [kv.model_dump() for kv in ex.other_fields if (kv.value or "").strip()]
     return out
 
 

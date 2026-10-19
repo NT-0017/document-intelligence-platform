@@ -156,6 +156,9 @@ is searched for each value:
 * found → **0.95**; not found → **0.60** (flagged *low*, threshold `< 0.80`); null value or no OCR → no score.
 * `overall_confidence` is the mean of all scores. Limitation: OCR itself can miss stamps/handwriting, so "low" means
   *not corroborated*, not *wrong*.
+* **Free-tier deployment note:** Tesseract needs more memory than Render's free 512 MB instance, so the live demo runs with
+  `OCR_ENABLED=false` (extraction and all financial validations are unaffected; only the confidence scores are blank).
+  Set `OCR_ENABLED=true` locally or on a larger instance to get them.
 
 ## 9. Persistence
 

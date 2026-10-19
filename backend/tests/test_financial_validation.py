@@ -184,3 +184,15 @@ def test_invoice_total_includes_shipping_and_flags_real_mismatch():
     assert chk["calculated_value"] == 917.47 and chk["status"] == "FAIL" and chk["variance"] == 1.0
     data["total_amount"] = F(917.47)
     assert [c for c in run_validation(DocumentType.INVOICE, data)["checks"] if c["name"] == "invoice_total_check"][0]["status"] == "PASS"
+
+
+def test_invoice_line_discount_percent_is_honoured():
+    # real GST invoice: 6 pcs x 7.44 with a 99 % line discount is printed as 0.45
+    def F(v): return {"value": v}
+    data = {"line_items": [
+        {"quantity": 6, "unit_price": 7.44, "amount": 0.45, "discount_percent": 99},
+        {"quantity": 8, "unit_price": 7.44, "amount": 0.6, "discount_percent": 99},
+        {"quantity": 6, "unit_price": 7.44, "amount": 0.45}]}  # same line without a discount -> genuinely wrong
+    checks = {c["name"]: c for c in run_validation(DocumentType.INVOICE, data)["checks"]}
+    assert checks["line_item_1_check"]["status"] == "PASS" and checks["line_item_2_check"]["status"] == "PASS"
+    assert checks["line_item_3_check"]["status"] == "FAIL"
