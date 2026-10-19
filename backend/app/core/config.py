@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 120
     database_url: str = "sqlite:///./data/documents.db"
     max_pages: int = 3
+    ocr_enabled: bool = True
+    ocr_max_pixels: int = 2_500_000   # downscale before Tesseract: keeps memory small on a 512 MB host
+    ocr_timeout_seconds: int = 45     # per Tesseract call; OCR is a cross-check, it must never hang the request
     max_file_size_mb: int = 10
     # A check passes if |calculated - reported| <= tolerance (absolute, in document units).
     # Statements are usually in crore/million with 2 decimals, so rounding drift can add up.

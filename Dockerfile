@@ -12,6 +12,6 @@ COPY backend backend
 COPY frontend frontend
 
 WORKDIR /app/backend
-ENV PYTHONUNBUFFERED=1 PORT=8000
+ENV PYTHONUNBUFFERED=1 PORT=8000 OMP_THREAD_LIMIT=1
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

@@ -41,3 +41,14 @@ def test_page_limit(pdf_bytes):
     assert validate_file("a.pdf", pdf_bytes(3)).status == "PASS"
     r = validate_file("a.pdf", pdf_bytes(4))
     assert r.error_code == "PAGE_LIMIT_EXCEEDED" and r.page_count == 4
+
+
+def test_ocr_downscales_large_images_to_pixel_budget():
+    from PIL import Image
+    from app.services.ocr_service import _prepare
+
+    big = Image.new("RGB", (2481, 3509), "white")  # ~8.7 MP scan, as in the dataset
+    small = _prepare(big, 2_500_000)
+    assert small.mode == "L" and small.size[0] * small.size[1] <= 2_500_000
+    tiny = Image.new("RGB", (100, 100))
+    assert _prepare(tiny, 2_500_000).size == (100, 100)

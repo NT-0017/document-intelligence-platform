@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import pypdfium2 as pdfium
 from PIL import Image
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.services.document_validation_service import PDF
 
@@ -32,16 +33,35 @@ class OcrResult:
         return any(p.strip() for p in self.pages)
 
 
+def _prepare(image: Image.Image, max_pixels: int) -> Image.Image:
+    """Greyscale + downscale to at most max_pixels so Tesseract stays within a small memory budget."""
+    gray = image.convert("L")
+    w, h = gray.size
+    if w * h > max_pixels:
+        ratio = (max_pixels / (w * h)) ** 0.5
+        gray = gray.resize((max(1, int(w * ratio)), max(1, int(h * ratio))), Image.LANCZOS)
+    return gray
+
+
 def _tesseract(image: Image.Image) -> str:
     import pytesseract
 
+    s = get_settings()
+    gray = _prepare(image, s.ocr_max_pixels)
     # Two page-segmentation modes; the union catches boxed/shaded table columns that one mode misses.
-    gray = image.convert("L")
-    return "\n".join(pytesseract.image_to_string(gray, config=f"--psm {m}") for m in (6, 11))
+    out = []
+    for mode in (6, 11):
+        try:
+            out.append(pytesseract.image_to_string(gray, config=f"--psm {mode}", timeout=s.ocr_timeout_seconds))
+        except RuntimeError as exc:  # pytesseract raises RuntimeError on timeout
+            logger.warning("Tesseract psm %d timed out: %s", mode, exc)
+    return "\n".join(out)
 
 
 def extract_text(content: bytes, file_type: str) -> OcrResult:
     """Never raises: OCR problems are logged and an empty result is returned."""
+    if not get_settings().ocr_enabled:
+        return OcrResult()
     try:
         if file_type == PDF:
             pdf = pdfium.PdfDocument(content)
@@ -49,10 +69,14 @@ def extract_text(content: bytes, file_type: str) -> OcrResult:
             if sum(len(t.strip()) for t in native) >= MIN_NATIVE_TEXT_CHARS:
                 logger.info("Native PDF text layer used (%d pages)", len(native))
                 return OcrResult(pages=native, ocr_used=False, engine="pdf-text-layer")
-            images = [pdf[i].render(scale=3).to_pil() for i in range(len(pdf))]
+            pages = []
+            for i in range(len(pdf)):  # one page at a time: never hold all rendered pages in memory
+                img = pdf[i].render(scale=2).to_pil()
+                pages.append(_tesseract(img))
+                del img
         else:
-            images = [Image.open(io.BytesIO(content))]
-        pages = [_tesseract(img) for img in images]
+            with Image.open(io.BytesIO(content)) as img:
+                pages = [_tesseract(img)]
         logger.info("Tesseract OCR completed (%d page(s))", len(pages))
         return OcrResult(pages=pages, ocr_used=True, engine="tesseract")
     except Exception as exc:  # noqa: BLE001 - OCR is best-effort
