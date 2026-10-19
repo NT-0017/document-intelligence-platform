@@ -210,3 +210,15 @@ def test_wrong_tax_included_flag_does_not_fail_a_consistent_gst_invoice():
     data["line_items"][0]["amount"] = 2000.0  # genuinely wrong lines still fail
     chk = {c["name"]: c for c in run_validation(DocumentType.INVOICE, data)["checks"]}
     assert chk["line_items_sum_check"]["status"] == "FAIL"
+
+
+def test_unsigned_rounding_off_accepted_in_either_sign_but_real_errors_still_fail():
+    def F(v): return {"value": v}
+    base = {"subtotal": F(5815.17), "tax_amount": F(1046.72), "total_amount": F(6862.0), "line_items": []}
+    for r in (0.11, -0.11):  # the model guessed the sign; the invoice prints plain 0.11
+        chk = [c for c in run_validation(DocumentType.INVOICE, {**base, "rounding_adjustment": F(r)})["checks"]
+               if c["name"] == "invoice_total_check"][0]
+        assert chk["status"] == "PASS"
+    chk = [c for c in run_validation(DocumentType.INVOICE, {**base, "total_amount": F(6870.0),
+           "rounding_adjustment": F(-0.11)})["checks"] if c["name"] == "invoice_total_check"][0]
+    assert chk["status"] == "FAIL"          # a real error is not masked

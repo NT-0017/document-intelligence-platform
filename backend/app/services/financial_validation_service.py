@@ -49,6 +49,23 @@ def _fv(data: dict, key: str) -> float | None:
 
 
 # ------------------------------- invoices ---------------------------------
+def _accept_unsigned_rounding(checks: list[dict], rounding: float | None) -> None:
+    """Round-off is usually printed without a sign ('Round Off 0.11'), so the sign the model picked is a guess.
+    If a failing check reconciles once the sign is flipped (only for round-offs of at most 1.00), accept it and say so."""
+    if not rounding or abs(rounding) > 1.0:
+        return
+    for c in checks:
+        if c["status"] != FAIL or "rounding_adjustment" not in c["formula"]:
+            continue
+        flipped = c["calculated_value"] - 2 * rounding
+        if abs(flipped - c["reported_value"]) <= c["tolerance"] + 1e-9:
+            c["calculated_value"] = round(flipped, 4)
+            c["variance"] = round(flipped - c["reported_value"], 4)
+            c["status"] = PASS
+            c["note"] = (f"Rounding adjustment {abs(rounding)} is printed without a sign; "
+                         f"applied as {'+' if rounding < 0 else '-'}{abs(rounding)} to reconcile.")
+
+
 def validate_invoice(data: dict, tol: float) -> list[dict]:
     checks: list[dict] = []
     items = data.get("line_items") or []
@@ -131,6 +148,7 @@ def validate_invoice(data: dict, tol: float) -> list[dict]:
     calc = cash - total if cash is not None and total is not None else None
     checks.append(_check("change_check", "cash_paid - total_amount",
                          {"cash_paid": cash, "total_amount": total}, calc, change, tol))
+    _accept_unsigned_rounding(checks, rounding)
     return checks
 
 

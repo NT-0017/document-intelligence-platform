@@ -29,6 +29,8 @@ INVOICE_HINTS = """Document type: INVOICE / RECEIPT.
 - shipping_amount = shipping / handling / freight / 'S&H' charge printed between the subtotal and the total.
 - Do not put an address, postcode or code in other_fields 'reference' or 'notes' unless the document labels it that
   way; use the label printed next to it as the key (e.g. 'job_site', 'account_code').
+- rounding_adjustment: copy the number exactly as printed (e.g. "Round Off 0.11" -> 0.11); add a minus sign only
+  if one is printed.
 - total_amount = the final payable total. cash_paid / change_given only if printed.
 - line_items: every purchased row with description, quantity, unit_price, amount (line total as printed).
   If the row has a discount column (Disc %), give it as discount_percent (99 for '99 %'); tax_code = HSN/SAC or tax code column.
