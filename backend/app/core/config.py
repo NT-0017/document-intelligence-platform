@@ -10,8 +10,8 @@ class Settings(BaseSettings):
 
     app_name: str = "Document Intelligence API"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    llm_timeout_seconds: int = 90
+    gemini_model: str = "gemini-3.5-flash-lite"
+    llm_timeout_seconds: int = 120
     database_url: str = "sqlite:///./data/documents.db"
     max_pages: int = 3
     max_file_size_mb: int = 10

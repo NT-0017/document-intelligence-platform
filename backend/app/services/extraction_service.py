@@ -15,6 +15,17 @@ logger = get_logger(__name__)
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
+def _unwrap(obj, model_cls):
+    """Models sometimes wrap the answer: [ {...} ] or {"invoice": {...}} / {"extracted_data": {...}}."""
+    if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+        obj = obj[0]
+    if isinstance(obj, dict) and len(obj) == 1:
+        (key, inner), = obj.items()
+        if key not in model_cls.model_fields and isinstance(inner, dict):
+            obj = inner
+    return obj
+
+
 class ExtractionService:
     def __init__(self, llm: LLMClient | None = None):
         self._llm = llm
@@ -39,11 +50,12 @@ class ExtractionService:
             ask = prompt if attempt == 1 else f"{prompt}\n\nYour previous answer was invalid: {last_error}\nReturn corrected JSON."
             raw = self.llm.generate_json(SYSTEM, ask, content, mime_type)
             try:
-                parsed = model_cls.model_validate_json(_FENCE.sub("", raw.strip()))
+                parsed = model_cls.model_validate(_unwrap(json.loads(_FENCE.sub("", raw.strip())), model_cls))
                 break
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = str(exc)[:500]
-                logger.warning("Model output failed schema validation (attempt %d): %s", attempt, last_error)
+                logger.warning("Model output failed schema validation (attempt %d): %s | raw_start=%r raw_end=%r",
+                               attempt, last_error, raw[:200], raw[-120:])
         else:
             raise ExtractionError("The model returned data that could not be parsed.",
                                   "EXTRACTION_INVALID_OUTPUT", 502)

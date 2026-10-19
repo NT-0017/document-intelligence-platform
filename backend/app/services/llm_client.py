@@ -57,14 +57,25 @@ class GeminiClient:
                 if code == 429:
                     raise ExtractionError("The extraction model is rate-limited; please retry shortly.",
                                           "LLM_RATE_LIMITED", 503) from exc
+                if code in (401, 403) or "api key" in str(exc).lower():
+                    raise ExtractionError("The model API key was rejected. Check GEMINI_API_KEY.",
+                                          "LLM_AUTH_FAILED", 503) from exc
+                if code == 404:
+                    raise ExtractionError("The model name was not found. Check GEMINI_MODEL.",
+                                          "LLM_MODEL_NOT_FOUND", 503) from exc
                 raise ExtractionError("The extraction model request failed.", "LLM_REQUEST_FAILED", 502) from exc
             except ExtractionError:
                 raise
             except Exception as exc:  # noqa: BLE001 - timeouts / network
-                logger.error("LLM call failed: %s", exc)
-                if attempt < self.MAX_ATTEMPTS:
+                kind = type(exc).__name__
+                timed_out = "timeout" in kind.lower() or "timed out" in str(exc).lower()
+                logger.error("LLM call failed (%s, attempt %d): %s", kind, attempt, exc)
+                if attempt < 2:  # a slow call is retried once only, so the user is not kept waiting for minutes
                     time.sleep(2 * attempt)
                     continue
-                raise ExtractionError("The extraction model timed out or is unreachable.",
-                                      "LLM_TIMEOUT", 504) from exc
+                if timed_out:
+                    raise ExtractionError("The extraction model took too long to answer. Please try again.",
+                                          "LLM_TIMEOUT", 504) from exc
+                raise ExtractionError("Could not reach the extraction model. Check your internet connection.",
+                                      "LLM_UNREACHABLE", 503) from exc
         raise ExtractionError("The extraction model request failed.", "LLM_REQUEST_FAILED", 502)

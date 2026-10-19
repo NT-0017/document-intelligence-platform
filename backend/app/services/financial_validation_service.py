@@ -63,6 +63,7 @@ def validate_invoice(data: dict, tol: float) -> list[dict]:
 
     subtotal, tax, disc = _fv(data, "subtotal"), _fv(data, "tax_amount"), _fv(data, "discount")
     total, rounding = _fv(data, "total_amount"), _fv(data, "rounding_adjustment")
+    ship = _fv(data, "shipping_amount") or 0.0
     incl = (data.get("tax_included_in_total") or {}).get("value")
 
     d, r = disc or 0.0, rounding or 0.0
@@ -93,14 +94,15 @@ def validate_invoice(data: dict, tol: float) -> list[dict]:
     # included and the subtotal-based formula does not reconcile, also try the tax-inclusive reading.
     if subtotal is not None and total is not None:
         if tax is not None:
-            ops = {"subtotal": subtotal, "tax_amount": tax, "discount": d, "rounding_adjustment": r}
-            res = _check("invoice_total_check", "subtotal + tax_amount - discount + rounding_adjustment",
-                         ops, subtotal + tax - d + r, total, tol)
+            ops = {"subtotal": subtotal, "tax_amount": tax, "discount": d, "rounding_adjustment": r,
+                   "shipping_amount": ship}
+            res = _check("invoice_total_check", "subtotal + tax_amount + shipping_amount - discount + rounding_adjustment",
+                         ops, subtotal + tax + ship - d + r, total, tol)
             if res["status"] == FAIL and incl:
                 alt = _check("invoice_total_check",
-                             "subtotal - discount + rounding_adjustment (tax already included in subtotal)",
-                             {"subtotal": subtotal, "discount": d, "rounding_adjustment": r},
-                             subtotal - d + r, total, tol)
+                             "subtotal + shipping_amount - discount + rounding_adjustment (tax already included in subtotal)",
+                             {"subtotal": subtotal, "shipping_amount": ship, "discount": d, "rounding_adjustment": r},
+                             subtotal + ship - d + r, total, tol)
                 if alt["status"] == PASS:
                     res = alt
             checks.append(res)
@@ -125,22 +127,48 @@ def _figure(data: dict, key: str, period: str) -> float | None:
     return (data.get("key_figures", {}).get(key) or {}).get(period)
 
 
-def _sum_check(name, formula, keys, target_key, data, period, tol, optional=()) -> dict:
-    ops: dict[str, float | None] = {k: _figure(data, k, period) for k in keys}
+def _label(terms: list[tuple[str, int]]) -> str:
+    out = ""
+    for i, (k, sign) in enumerate(terms):
+        out += (k if sign > 0 else f"- {k}") if i == 0 else (f" + {k}" if sign > 0 else f" - {k}")
+    return out
+
+
+def _linear(name, data, period, tol, target_key, required, spec_optional=(), alt_optional=()) -> dict:
+    """Check  sum(sign*value) = target.
+
+    `required` terms are always used. Optional terms are only used if the document shows them:
+    the spec reading (`spec_optional`) is tried first; if it does not reconcile, other readings that
+    real statements use (`alt_optional`, e.g. an item that is already inside the reported subtotal)
+    are tried. The reading that reconciles is reported, otherwise the spec reading is reported as FAIL.
+    """
+    from itertools import combinations
+
     target = _figure(data, target_key, period)
-    opt = {k: _figure(data, k, period) for k in optional}
-    ops.update({k: v for k, v in opt.items() if v is not None})
-    calc = None
-    if all(v is not None for v in (ops[k] for k in keys)):
-        calc = sum(ops[k] for k in keys) + sum(v for v in opt.values() if v is not None)
-    return _check(name, formula, ops, calc, target, tol, period=period)
+    req_vals = {k: _figure(data, k, period) for k, _ in required}
+    present = [(k, sg) for k, sg in list(spec_optional) + list(alt_optional) if _figure(data, k, period) is not None]
+    primary_opts = [t for t in present if t in list(spec_optional)]
+    options = [primary_opts]
+    for r in range(len(present) + 1):
+        for combo in combinations(present, r):
+            if list(combo) != primary_opts:
+                options.append(list(combo))
 
+    def build(opts):
+        terms = list(required) + opts
+        ops = {k: _figure(data, k, period) for k, _ in terms}
+        calc = None if any(v is None for v in ops.values()) else sum(sg * ops[k] for k, sg in terms)
+        return _check(name, _label(terms), ops, calc, target, tol, period=period), terms
 
-def _diff_check(name, formula, plus_key, minus_key, target_key, data, period, tol) -> dict:
-    a, b = _figure(data, plus_key, period), _figure(data, minus_key, period)
-    calc = a - b if a is not None and b is not None else None
-    return _check(name, formula, {plus_key: a, minus_key: b}, calc,
-                  _figure(data, target_key, period), tol, period=period)
+    primary, _ = build(options[0])
+    if primary["status"] != FAIL:
+        return primary
+    for opts in options[1:]:
+        res, _terms = build(opts)
+        if res["status"] == PASS:
+            res["note"] = "Matched using a different reading of this statement's layout (an extra line is included in the reported figure)."
+            return res
+    return primary
 
 
 def _components_check(data, section, total_key, period, tol) -> dict:
@@ -175,41 +203,36 @@ def validate_balance_sheet(data: dict, tol: float) -> list[dict]:
 def validate_profit_and_loss(data: dict, tol: float) -> list[dict]:
     checks = []
     for p in data.get("periods", []):
+        L = lambda name, target, req, **kw: _linear(name, data, p, tol, target, req, **kw)  # noqa: E731
         checks += [
-            _sum_check("total_income_check", "interest_earned + other_income",
-                       ["interest_earned", "other_income"], "total_income", data, p, tol),
-            _sum_check("total_expenditure_check", "interest_expended + operating_expenses + provisions_and_contingencies",
-                       ["interest_expended", "operating_expenses", "provisions_and_contingencies"],
-                       "total_expenditure", data, p, tol),
-            _diff_check("profit_before_minority_interest_check", "total_income - total_expenditure",
-                        "total_income", "total_expenditure", "profit_before_minority_interest", data, p, tol),
-            _diff_check("net_profit_attributable_check", "profit_before_minority_interest - minority_interest",
-                        "profit_before_minority_interest", "minority_interest",
-                        "net_profit_attributable_to_group", data, p, tol),
-            _sum_check("appropriation_check", "net_profit_attributable_to_group + brought_forward_profit",
-                       ["net_profit_attributable_to_group", "brought_forward_profit"],
-                       "total_available_for_appropriation", data, p, tol),
+            L("total_income_check", "total_income", [("interest_earned", 1), ("other_income", 1)]),
+            L("total_expenditure_check", "total_expenditure",
+              [("interest_expended", 1), ("operating_expenses", 1), ("provisions_and_contingencies", 1)]),
+            L("profit_before_minority_interest_check", "profit_before_minority_interest",
+              [("total_income", 1), ("total_expenditure", -1)]),
+            L("net_profit_attributable_check", "net_profit_attributable_to_group",
+              [("profit_before_minority_interest", 1), ("minority_interest", -1)],
+              alt_optional=[("share_in_profit_of_associates", 1)]),
+            L("appropriation_check", "total_available_for_appropriation",
+              [("net_profit_attributable_to_group", 1), ("brought_forward_profit", 1)],
+              alt_optional=[("impact_on_amalgamation", 1)]),
         ]
-        # generic (other layouts) - only when the figures exist
         if _figure(data, "revenue", p) is not None and _figure(data, "cost_of_sales", p) is not None:
-            checks.append(_diff_check("gross_profit_check", "revenue - cost_of_sales",
-                                      "revenue", "cost_of_sales", "gross_profit", data, p, tol))
+            checks.append(L("gross_profit_check", "gross_profit", [("revenue", 1), ("cost_of_sales", -1)]))
     return checks
 
 
 def validate_cash_flow(data: dict, tol: float) -> list[dict]:
     checks = []
     for p in data.get("periods", []):
-        checks.append(_sum_check(
-            "net_change_in_cash_check",
-            "operating + investing + financing (+ fx_adjustment if shown)",
-            ["operating_cash_flow", "investing_cash_flow", "financing_cash_flow"],
-            "net_change_in_cash", data, p, tol, optional=["fx_adjustment"]))
-        checks.append(_sum_check(
-            "closing_cash_check",
-            "opening_cash + net_change_in_cash (+ cash_acquired_on_amalgamation if shown)",
-            ["opening_cash", "net_change_in_cash"], "closing_cash", data, p, tol,
-            optional=["cash_acquired_on_amalgamation"]))
+        checks.append(_linear(
+            "net_change_in_cash_check", data, p, tol, "net_change_in_cash",
+            [("operating_cash_flow", 1), ("investing_cash_flow", 1), ("financing_cash_flow", 1)],
+            spec_optional=[("fx_adjustment", 1)], alt_optional=[("cash_acquired_on_amalgamation", 1)]))
+        checks.append(_linear(
+            "closing_cash_check", data, p, tol, "closing_cash",
+            [("opening_cash", 1), ("net_change_in_cash", 1)],
+            spec_optional=[("cash_acquired_on_amalgamation", 1)]))
     return checks
 
 

@@ -40,7 +40,7 @@ Diagram: [`docs/architecture.png`](docs/architecture.png) (source: `docs/archite
 | Choice | Reason |
 |---|---|
 | **FastAPI** | Typed request handling, automatic Swagger/OpenAPI, multipart upload support. |
-| **Gemini (`gemini-2.5-flash`, configurable)** | Free tier; reads PDFs and images directly, so scanned statements and receipts need no separate OCR step. Behind an `LLMClient` interface, so another provider can be swapped in without touching the pipeline. |
+| **Gemini (`gemini-3.5-flash-lite`, configurable)** | Free tier; reads PDFs and images directly, so scanned statements and receipts need no separate OCR step. Behind an `LLMClient` interface, so another provider can be swapped in without touching the pipeline. |
 | **Pydantic schemas** | Every model answer is validated; invalid output is re-asked once, then fails cleanly. |
 | **Tesseract + PDF text layer** | Independent text source used only to *cross-check* the LLM (confidence), not as the primary extractor. |
 | **SQLAlchemy + SQLite / Postgres** | SQLite locally; Postgres (e.g. Neon free tier) in production because free web hosts wipe local files. |
@@ -69,12 +69,12 @@ Tests: `cd backend && python -m pytest -q`. To include the real-sample tests:
 | Variable | Default | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | – | LLM key (**secret**, never committed) |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Model name |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model name |
 | `DATABASE_URL` | `sqlite:///./data/documents.db` | SQLAlchemy URL; `postgres://…` is accepted too |
 | `MAX_PAGES` / `MAX_FILE_SIZE_MB` | `3` / `10` | Input limits |
 | `TOLERANCE_STATEMENT` | `1.0` | Absolute tolerance for statement checks (document units) |
 | `TOLERANCE_INVOICE` | `0.05` | Absolute tolerance for invoice checks |
-| `LLM_TIMEOUT_SECONDS` | `90` | Model call timeout |
+| `LLM_TIMEOUT_SECONDS` | `120` | Model call timeout |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## 5. API

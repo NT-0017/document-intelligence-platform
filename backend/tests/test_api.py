@@ -140,3 +140,25 @@ def test_real_receipt_image_flags_value_ocr_cannot_corroborate(client):
     f = f"{SAMPLES}/Invoices/X51005663293.jpg"
     body = post(client, "X51005663293.jpg", open(f, "rb").read(), "invoice", "image/jpeg").json()
     assert body["processing_status"] == "PASS" and body["extracted_data"]["total_amount"]["confidence"] >= 0.9
+
+
+def test_llm_client_classifies_timeout_and_unreachable(monkeypatch):
+    import httpx
+    from app.services import llm_client
+    monkeypatch.setattr(llm_client.time, "sleep", lambda s: None)
+    client = llm_client.GeminiClient()
+
+    def boom(exc):
+        def _raise(*a, **k):
+            raise exc
+        return _raise
+
+    monkeypatch.setattr(client._client.models, "generate_content", boom(httpx.ReadTimeout("slow")))
+    with pytest.raises(ExtractionError) as e:
+        client.generate_json("s", "p", b"x", "image/png")
+    assert e.value.code == "LLM_TIMEOUT"
+
+    monkeypatch.setattr(client._client.models, "generate_content", boom(httpx.ConnectError("no route")))
+    with pytest.raises(ExtractionError) as e:
+        client.generate_json("s", "p", b"x", "image/png")
+    assert e.value.code == "LLM_UNREACHABLE"

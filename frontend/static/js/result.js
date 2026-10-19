@@ -16,13 +16,22 @@ function valueCell(v) {
   return String(v);
 }
 
-function fieldsTable(data, keys) {
+// A statement cell with no number: a printed dash / blank means "nil" (grey); only text that
+// was printed but could not be turned into a number is "unreadable" (red).
+function nilOrUnreadable(raw) {
+  const printed = typeof raw === "string" && !/^[-\u2013\u2014\s]*$/.test(raw);
+  return printed ? chip("unreadable", "missing") : h("span", { class: "muted", title: "nil / not stated in the document" }, "\u2014");
+}
+
+function fieldsTable(data, keys, requiredMissing = []) {
   const rows = keys.map((k) => {
     const f = data[k];
     const missing = f.value === null || f.value === undefined;
+    const required = requiredMissing.includes(k);
     const low = f.confidence !== null && f.confidence !== undefined && f.confidence < LOW;
-    return h("tr", { class: missing ? "row-missing" : low ? "row-low" : "" },
-      h("td", {}, SCALAR_LABELS(k)), h("td", {}, valueCell(f.value)),
+    return h("tr", { class: missing && required ? "row-missing" : low ? "row-low" : "" },
+      h("td", {}, SCALAR_LABELS(k)),
+      h("td", {}, missing && !required ? chip("not in document", "NOT_APPLICABLE") : valueCell(f.value)),
       h("td", {}, missing ? "" : confCell(f.confidence)), h("td", { class: "evidence" }, evidence(f)));
   });
   return h("div", { class: "table-wrap" }, h("table", {},
@@ -36,18 +45,25 @@ function simpleTable(headers, rows, numCols = []) {
     h("tbody", {}, rows)));
 }
 
-function renderInvoice(data, root) {
+function renderInvoice(data, root, validation) {
+  const requiredMissing = (validation && validation.missing_required_fields) || [];
   root.append(h("h2", {}, "Fields"));
-  root.append(fieldsTable(data, Object.keys(data).filter((k) => isField(data[k]))));
+  root.append(h("p", { class: "muted" }, "Red = a key field that could not be found. Grey = the document simply does not contain it."));
+  root.append(fieldsTable(data, Object.keys(data).filter((k) => isField(data[k])), requiredMissing));
   const items = data.line_items || [];
   root.append(h("h3", {}, `Line items (${items.length})`));
   if (!items.length) root.append(h("p", { class: "muted" }, "No line items were extracted."));
   else root.append(simpleTable(["#", "Description", "Qty", "Unit price", "Amount", "Tax", "Confidence"],
     items.map((li, i) => h("tr", { class: li.confidence != null && li.confidence < LOW ? "row-low" : "" },
-      h("td", {}, i + 1), h("td", {}, li.description ?? ""), h("td", { class: "num" }, valueCell(li.quantity)),
-      h("td", { class: "num" }, valueCell(li.unit_price)), h("td", { class: "num" }, valueCell(li.amount)),
+      h("td", {}, i + 1), h("td", {}, li.description ?? ""), h("td", { class: "num" }, notPrinted(li.quantity, li)),
+      h("td", { class: "num" }, notPrinted(li.unit_price, li)), h("td", { class: "num" }, valueCell(li.amount)),
       h("td", {}, li.tax_code ?? ""), h("td", {}, confCell(li.confidence)))), [2, 3, 4]));
   renderOther(data, root);
+}
+
+// Qty / unit price are often not printed on receipts; only the line amount is. Grey, not red.
+function notPrinted(v, li) {
+  return (v === null || v === undefined) && li.amount != null ? h("span", { class: "muted", title: "not printed on the document" }, "\u2014") : valueCell(v);
 }
 
 function renderOther(data, root) {
@@ -71,7 +87,7 @@ function renderStatement(data, root) {
   if (!Object.keys(figs).length) root.append(h("p", { class: "muted" }, "No key figures could be identified."));
   else root.append(simpleTable(["Figure", ...periods],
     Object.entries(figs).map(([k, byPeriod]) => h("tr", {}, h("td", {}, SCALAR_LABELS(k)),
-      periods.map((p) => h("td", { class: "num" }, valueCell(byPeriod[p] ?? null))))), periods.map((_, i) => i + 1)));
+      periods.map((p) => h("td", { class: "num" }, byPeriod[p] == null ? h("span", { class: "muted" }, "\u2014") : valueCell(byPeriod[p]))))), periods.map((_, i) => i + 1)));
 
   const items = data.line_items || [];
   root.append(h("h3", {}, `All line items (${items.length})`));
@@ -82,7 +98,11 @@ function renderStatement(data, root) {
       const low = li.confidence != null && li.confidence < LOW;
       return h("tr", { class: `r-${li.row_type} ${unreadable ? "row-missing" : low ? "row-low" : ""}`, title: li.canonical_key ? "key: " + li.canonical_key : null },
         h("td", {}, li.label), h("td", {}, li.schedule_ref ?? ""),
-        periods.map((p) => h("td", { class: "num" }, li.row_type === "heading" ? "" : valueCell((li.values || {})[p] ?? null))),
+        periods.map((p) => {
+          if (li.row_type === "heading") return h("td", {}, "");
+          const v = (li.values || {})[p];
+          return h("td", { class: "num" }, v == null ? nilOrUnreadable((li.raw_values || {})[p]) : valueCell(v));
+        }),
         h("td", {}, li.row_type === "heading" ? "" : confCell(li.confidence)));
     }), periods.map((_, i) => i + 2)));
   renderOther(data, root);
@@ -153,7 +173,7 @@ function setupTabs() {
     state.hidden = true; document.getElementById("result").hidden = false;
     renderSummary(r); renderBanners(r); setupTabs();
     const dataRoot = document.getElementById("tab-data");
-    if (r.extracted_data) (r.extracted_data.periods ? renderStatement : renderInvoice)(r.extracted_data, dataRoot);
+    if (r.extracted_data) (r.extracted_data.periods ? renderStatement : renderInvoice)(r.extracted_data, dataRoot, r.validation);
     else dataRoot.append(h("p", { class: "muted" }, "No data was extracted for this document."));
     renderValidation(r, document.getElementById("tab-validation"));
     renderJson(r, document.getElementById("tab-json"));

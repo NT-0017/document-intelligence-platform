@@ -130,3 +130,57 @@ def test_invoice_tax_separate_total_check():
     d["total_amount"] = field(30.30)
     r = run_validation(DocumentType.INVOICE, d)
     assert [c for c in r["checks"] if c["name"] == "invoice_total_check"][0]["status"] == "PASS"
+
+
+# ---- real layouts that previously failed (HDFC statements in '000) ----------------------------
+def test_cash_flow_with_amalgamation_line_inside_net_increase():
+    # FY2017 column of the 2018 cash flow statement: net increase already includes the amalgamation cash.
+    kf = {"operating_cash_flow": 172815931, "investing_cash_flow": -11476802, "financing_cash_flow": -58929743,
+          "fx_adjustment": -282622, "cash_acquired_on_amalgamation": 295617, "net_change_in_cash": 102422381,
+          "opening_cash": 390688815, "closing_cash": 493111196}
+    d = {"periods": ["FY17"], "key_figures": {k: {"FY17": v} for k, v in kf.items()}, "line_items": []}
+    r = run_validation(DocumentType.CASH_FLOW_STATEMENT, d)
+    assert r["overall_status"] == "PASS", r["issues"]
+    net = by_name(r, "net_change_in_cash_check")[0]
+    assert "cash_acquired_on_amalgamation" in net["formula"] and net.get("note")  # transparent about the reading used
+    closing = by_name(r, "closing_cash_check")[0]
+    assert "cash_acquired_on_amalgamation" not in closing["formula"]  # not double counted
+
+
+def test_cash_flow_wrong_numbers_still_fail():
+    kf = {"operating_cash_flow": 100.0, "investing_cash_flow": -20.0, "financing_cash_flow": -10.0,
+          "net_change_in_cash": 999.0, "opening_cash": 50.0, "closing_cash": 130.0}
+    d = {"periods": ["FY"], "key_figures": {k: {"FY": v} for k, v in kf.items()}, "line_items": []}
+    assert run_validation(DocumentType.CASH_FLOW_STATEMENT, d)["overall_status"] == "FAIL"
+
+
+def test_pl_with_associates_and_amalgamation_rows():
+    # FY2017 P&L: profit attributable includes associates; total available includes impact on amalgamation.
+    kf = {"interest_earned": 732713529, "other_income": 128776329, "total_income": 861489858,
+          "interest_expended": 380415844, "operating_expenses": 207510707, "provisions_and_contingencies": 120689285,
+          "total_expenditure": 708615836, "profit_before_minority_interest": 152874022, "minority_interest": 367165,
+          "share_in_profit_of_associates": 23393, "net_profit_attributable_to_group": 152530250,
+          "impact_on_amalgamation": 274507, "brought_forward_profit": 248255886,
+          "total_available_for_appropriation": 401060643}
+    d = {"periods": ["FY17"], "key_figures": {k: {"FY17": v} for k, v in kf.items()}, "line_items": []}
+    r = run_validation(DocumentType.PROFIT_AND_LOSS, d)
+    assert r["overall_status"] == "PASS", r["issues"]
+    assert all(c["status"] == "PASS" for c in r["checks"])
+
+
+def test_pl_genuine_error_is_not_hidden_by_alternate_readings():
+    d = pl_data()
+    d["key_figures"]["total_available_for_appropriation"][P23] = 150000.00
+    r = run_validation(DocumentType.PROFIT_AND_LOSS, d)
+    assert by_name(r, "appropriation_check", P23)[0]["status"] == "FAIL"
+
+
+def test_invoice_total_includes_shipping_and_flags_real_mismatch():
+    # real batch2-0999: subtotal 804 + tax 63.47 + S&H 50 = 917.47, but the document prints 916.47
+    def F(v): return {"value": v}
+    data = {"subtotal": F(804.0), "tax_amount": F(63.47), "shipping_amount": F(50.0), "total_amount": F(916.47),
+            "line_items": []}
+    chk = [c for c in run_validation(DocumentType.INVOICE, data)["checks"] if c["name"] == "invoice_total_check"][0]
+    assert chk["calculated_value"] == 917.47 and chk["status"] == "FAIL" and chk["variance"] == 1.0
+    data["total_amount"] = F(917.47)
+    assert [c for c in run_validation(DocumentType.INVOICE, data)["checks"] if c["name"] == "invoice_total_check"][0]["status"] == "PASS"

@@ -11,6 +11,6 @@ services:
       - key: DATABASE_URL
         sync: false          # e.g. a free Neon/Supabase Postgres URL (SQLite is wiped on free-tier restarts)
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.5-flash-lite
       - key: LOG_LEVEL
         value: INFO
